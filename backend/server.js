@@ -6,6 +6,10 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+app.get('/', (req, res) => {
+  res.send('Welcome to the Stock API!');
+});
+
 const sequelize = new Sequelize({
   dialect: 'sqlite',
   storage: 'db/database.sqlite',
