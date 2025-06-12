@@ -62,7 +62,8 @@ export default function Orders({ darkMode, setDarkMode }) {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch('http://localhost:5000/api/orders');
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${API_URL}/api/orders`);
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
@@ -114,7 +115,8 @@ export default function Orders({ darkMode, setDarkMode }) {
     };
     try {
       console.log(`[${new Date().toISOString()}] Sending new order:`, payload);
-      const response = await fetch('http://localhost:5000/api/orders', {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${API_URL}/api/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -155,7 +157,8 @@ export default function Orders({ darkMode, setDarkMode }) {
       status: editOrder.status,
     };
     try {
-      const response = await fetch(`http://localhost:5000/api/orders/${editOrder.id}`, {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${API_URL}/api/orders/${editOrder.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -187,9 +190,10 @@ export default function Orders({ darkMode, setDarkMode }) {
       return;
     }
     try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
       const deletePromises = selectedOrders.map(async (index) => {
         const orderId = filteredOrders[index].id;
-        const response = await fetch(`http://localhost:5000/api/orders/${orderId}`, {
+        const response = await fetch(`${API_URL}/api/orders/${orderId}`, {
           method: 'DELETE',
         });
         if (!response.ok) {

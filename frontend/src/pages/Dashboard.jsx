@@ -33,8 +33,10 @@ export default function Dashboard({ darkMode, setDarkMode }) {
         setLoading(true);
         setError(null);
 
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
         // Fetch summary data
-        const summaryResponse = await fetch('http://localhost:5000/api/dashboard-summary');
+        const summaryResponse = await fetch(`${API_URL}/api/dashboard-summary`);
         if (!summaryResponse.ok) {
           throw new Error(`Failed to fetch summary: ${summaryResponse.status}`);
         }
@@ -42,7 +44,7 @@ export default function Dashboard({ darkMode, setDarkMode }) {
         setSummary(summaryData);
 
         // Fetch chart data
-        const chartResponse = await fetch('http://localhost:5000/api/chart-data');
+        const chartResponse = await fetch(`${API_URL}/api/chart-data`);
         if (!chartResponse.ok) {
           throw new Error(`Failed to fetch chart data: ${chartResponse.status}`);
         }
@@ -50,7 +52,7 @@ export default function Dashboard({ darkMode, setDarkMode }) {
         setChartData(chartData);
 
         // Fetch activities
-        const activitiesResponse = await fetch('http://localhost:5000/api/activities');
+        const activitiesResponse = await fetch(`${API_URL}/api/activities`);
         if (!activitiesResponse.ok) {
           throw new Error(`Failed to fetch activities: ${activitiesResponse.status}`);
         }
@@ -189,17 +191,17 @@ export default function Dashboard({ darkMode, setDarkMode }) {
         
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-  <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md shadow-top">
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-gray-500 dark:text-gray-400">Total Books</p>
-        <h2 className="text-3xl font-bold mt-2">{summary.totalBooks}</h2>
-      </div>
-      <div className="bg-pink-100 dark:bg-pink-900 p-3 rounded-full">
-        <FiPieChart className="text-pink-600 dark:text-pink-300 w-6 h-6" />
-      </div>
-    </div>
-  </div>
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md shadow-top">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-500 dark:text-gray-400">Total Books</p>
+                <h2 className="text-3xl font-bold mt-2">{summary.totalBooks}</h2>
+              </div>
+              <div className="bg-pink-100 dark:bg-pink-900 p-3 rounded-full">
+                <FiPieChart className="text-pink-600 dark:text-pink-300 w-6 h-6" />
+              </div>
+            </div>
+          </div>
 
           <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md border border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between">
@@ -252,7 +254,7 @@ export default function Dashboard({ darkMode, setDarkMode }) {
                       },
                       grid: {
                         color: darkMode ? 'rgba(229, 231, 235, 0.1)' : 'rgba(55, 65, 81, 0.1)',
-                      }
+                      },
                     },
                     x: {
                       ticks: {

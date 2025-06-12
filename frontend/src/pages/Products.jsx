@@ -63,7 +63,8 @@ export default function Products({ darkMode, setDarkMode }) {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch('http://localhost:5000/api/books');
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${API_URL}/api/books`);
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
@@ -108,7 +109,8 @@ export default function Products({ darkMode, setDarkMode }) {
     const formattedDate = selectedDate.toISOString().split('T')[0];
     
     try {
-      const response = await fetch('http://localhost:5000/api/books', {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${API_URL}/api/books`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...newItem, date: formattedDate }),
@@ -143,7 +145,8 @@ export default function Products({ darkMode, setDarkMode }) {
     const formattedDate = selectedDate.toISOString().split('T')[0];
     
     try {
-      const response = await fetch(`http://localhost:5000/api/books/${editItem.id}`, {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${API_URL}/api/books/${editItem.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...editItem, date: formattedDate }),
@@ -183,7 +186,7 @@ export default function Products({ darkMode, setDarkMode }) {
     try {
       const deletePromises = selectedItems.map(async (index) => {
         const itemId = filteredItems[index].id;
-        const response = await fetch(`http://localhost:5000/api/books/${itemId}`, {
+        const response = await fetch(`${API_URL}/api/books/${itemId}`, {
           method: 'DELETE',
         });
         if (!response.ok) {
