@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+
+/* src/index.css (or your main CSS file) */ /* Ensure Tailwind is imported */
+
+/* Override prefers-color-scheme for dark: styles */
+@media (prefers-color-scheme: dark) {
+  html:not(.dark) [class*='dark\:text-'] {
+    color: inherit !important; /* Prevent dark mode text colors in light mode */
+  }
+  html:not(.dark) [class*='dark\:bg-'] {
+    background-color: inherit !important; /* Prevent dark mode backgrounds */
+  }
+  html:not(.dark) [class*='dark\:border-'] {
+    border-color: inherit !important; /* Prevent dark mode borders */
+  }
+}
