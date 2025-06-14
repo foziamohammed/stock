@@ -1,96 +1,65 @@
+require('dotenv').config();
 const express = require('express');
-const { Sequelize, DataTypes } = require('sequelize');
+const { createClient } = require('@supabase/supabase-js');
 const cors = require('cors');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
+// Initialize Supabase client with your credentials
+const supabase = createClient(process.env.SUPABASE_URL, process.env.ANON_KEY);
+
 app.get('/', (req, res) => {
   res.send('Welcome to the Stock API!');
 });
 
-const sequelize = new Sequelize({
-  dialect: 'sqlite',
-  storage: 'db/database.sqlite',
-});
-
-const Book = sequelize.define('Book', {
-  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-  name: { type: DataTypes.STRING, allowNull: false },
-  category: { type: DataTypes.STRING, allowNull: false },
-  amount: { type: DataTypes.INTEGER, allowNull: false },
-  cost: { type: DataTypes.INTEGER, allowNull: false },
-  date: { type: DataTypes.DATEONLY, allowNull: false },
-});
-
-const Order = sequelize.define('Order', {
-  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-  bookName: { type: DataTypes.STRING, allowNull: false },
-  quantity: { type: DataTypes.INTEGER, allowNull: false },
-  customerName: { type: DataTypes.STRING, allowNull: false },
-  category: { type: DataTypes.STRING, allowNull: false }, // Added category field
-  orderDate: { type: DataTypes.DATEONLY, allowNull: false },
-  status: { type: DataTypes.STRING, allowNull: false },
-});
-
-const Activity = sequelize.define('Activity', {
-  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-  type: { type: DataTypes.STRING, allowNull: false },
-  message: { type: DataTypes.STRING, allowNull: false },
-  createdAt: { type: DataTypes.DATE, defaultValue: Sequelize.NOW },
-});
-
-const startServer = async () => {
-  try {
-    await sequelize.authenticate();
-    console.log('Database connected');
-    await sequelize.sync({ alter: true }); // Use alter to update schema
-    console.log('Database synced');
-    console.log('Database initialized without seeded data');
-    app.listen(5000, () => console.log('Server running on port 5000'));
-  } catch (err) {
-    console.error('Failed to connect to database:', err);
-  }
-};
-
+// Get all books
 app.get('/api/books', async (req, res) => {
   try {
-    const books = await Book.findAll();
-    res.json(books);
+    const { data, error } = await supabase.from('books').select('*');
+    if (error) throw error;
+    res.json(data);
   } catch (err) {
     console.error('Error fetching books:', err);
-    res.status(500).json({ error: 'Failed to fetch books' });
+    res.status(500).json({ error: 'Failed to fetch books', details: err.message });
   }
 });
 
+// Get all orders
 app.get('/api/orders', async (req, res) => {
   try {
-    const orders = await Order.findAll();
-    res.json(orders);
+    const { data, error } = await supabase.from('orders').select('*');
+    if (error) throw error;
+    res.json(data);
   } catch (err) {
     console.error('Error fetching orders:', err);
-    res.status(500).json({ error: 'Failed to fetch orders' });
+    res.status(500).json({ error: 'Failed to fetch orders', details: err.message });
   }
 });
 
+// Get recent activities
 app.get('/api/activities', async (req, res) => {
   try {
-    const activities = await Activity.findAll({
-      order: [['createdAt', 'DESC']],
-      limit: 10,
-    });
-    res.json(activities);
+    const { data, error } = await supabase
+      .from('activities')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(10);
+    if (error) throw error;
+    res.json(data);
   } catch (err) {
     console.error('Error fetching activities:', err);
-    res.status(500).json({ error: 'Failed to fetch activities' });
+    res.status(500).json({ error: 'Failed to fetch activities', details: err.message });
   }
 });
 
+// Get chart data
 app.get('/api/chart-data', async (req, res) => {
   try {
-    const books = await Book.findAll();
-    const categoryData = books.reduce((acc, book) => {
+    const { data, error } = await supabase.from('books').select('*');
+    if (error) throw error;
+    const categoryData = data.reduce((acc, book) => {
       const category = book.category || 'Uncategorized';
       acc[category] = (acc[category] || 0) + (book.amount || 0);
       return acc;
@@ -112,10 +81,13 @@ app.get('/api/chart-data', async (req, res) => {
   }
 });
 
+// Get dashboard summary
 app.get('/api/dashboard-summary', async (req, res) => {
   try {
-    const books = await Book.findAll();
-    const orders = await Order.findAll();
+    const { data: books, error: booksError } = await supabase.from('books').select('*');
+    if (booksError) throw booksError;
+    const { data: orders, error: ordersError } = await supabase.from('orders').select('*');
+    if (ordersError) throw ordersError;
     const totalBooks = books.reduce((sum, book) => sum + (book.amount || 0), 0);
     const lowStock = books.filter(book => book.amount < 50).length;
     const totalOrders = orders.length;
@@ -127,6 +99,7 @@ app.get('/api/dashboard-summary', async (req, res) => {
   }
 });
 
+// Add a book
 app.post('/api/books', async (req, res) => {
   console.log('Received POST /api/books:', req.body);
   try {
@@ -137,18 +110,23 @@ app.post('/api/books', async (req, res) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
     }
-    const book = await Book.create({ name, category, amount, cost, date });
-    await Activity.create({
+    const { data, error } = await supabase
+      .from('books')
+      .insert({ name, category, amount, cost, date })
+      .select();
+    if (error) throw error;
+    await supabase.from('activities').insert({
       type: 'book_added',
       message: `New book "${name}" added to inventory`,
     });
-    res.status(201).json(book);
+    res.status(201).json(data[0]);
   } catch (err) {
     console.error('Error adding book:', err);
     res.status(500).json({ error: 'Failed to add book', details: err.message });
   }
 });
 
+// Update a book
 app.put('/api/books/:id', async (req, res) => {
   console.log(`Received PUT /api/books/${req.params.id}:`, req.body);
   try {
@@ -160,22 +138,25 @@ app.put('/api/books/:id', async (req, res) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
     }
-    const book = await Book.findByPk(id);
-    if (!book) {
-      return res.status(404).json({ error: 'Book not found' });
-    }
-    await book.update({ name, category, amount, cost, date });
-    await Activity.create({
+    const { data, error } = await supabase
+      .from('books')
+      .update({ name, category, amount, cost, date })
+      .eq('id', id)
+      .select();
+    if (error) throw error;
+    if (!data.length) return res.status(404).json({ error: 'Book not found' });
+    await supabase.from('activities').insert({
       type: 'book_updated',
       message: `Book "${name}" updated`,
     });
-    res.status(200).json(book);
+    res.status(200).json(data[0]);
   } catch (err) {
     console.error('Error updating book:', err);
     res.status(500).json({ error: 'Failed to update book', details: err.message });
   }
 });
 
+// Add an order
 app.post('/api/orders', async (req, res) => {
   console.log(`[${new Date().toISOString()}] Received POST /api/orders:`, req.body);
   try {
@@ -189,25 +170,23 @@ app.post('/api/orders', async (req, res) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(orderDate)) {
       return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
     }
-    const order = await Order.create({
-      bookName: bookName.trim(),
-      quantity,
-      customerName,
-      category: category.trim(), // Added category
-      orderDate,
-      status,
-    });
-    await Activity.create({
+    const { data, error } = await supabase
+      .from('orders')
+      .insert({ book_name: bookName.trim(), quantity, customer_name: customerName, category: category.trim(), order_date: orderDate, status })
+      .select();
+    if (error) throw error;
+    await supabase.from('activities').insert({
       type: 'order_received',
       message: `New order received from ${customerName} for ${bookName} (${category})`,
     });
-    res.status(201).json(order);
+    res.status(201).json(data[0]);
   } catch (err) {
     console.error('Error adding order:', err);
     res.status(500).json({ error: 'Failed to add order', details: err.message });
   }
 });
 
+// Update an order
 app.put('/api/orders/:id', async (req, res) => {
   console.log(`Received PUT /api/orders/${req.params.id}:`, req.body);
   try {
@@ -219,58 +198,61 @@ app.put('/api/orders/:id', async (req, res) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(orderDate)) {
       return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
     }
-    const order = await Order.findByPk(id);
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
-    await order.update({ bookName, quantity, customerName, category, orderDate, status });
-    await Activity.create({
+    const { data, error } = await supabase
+      .from('orders')
+      .update({ book_name: bookName, quantity, customer_name: customerName, category, order_date: orderDate, status })
+      .eq('id', id)
+      .select();
+    if (error) throw error;
+    if (!data.length) return res.status(404).json({ error: 'Order not found' });
+    await supabase.from('activities').insert({
       type: 'order_updated',
       message: `Order from ${customerName} for ${bookName} (${category}) updated`,
     });
-    res.status(200).json(order);
+    res.status(200).json(data[0]);
   } catch (err) {
     console.error('Error updating order:', err);
     res.status(500).json({ error: 'Failed to update order', details: err.message });
   }
 });
 
+// Delete a book
 app.delete('/api/books/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const book = await Book.findByPk(id);
-    if (!book) {
-      return res.status(404).json({ error: 'Book not found' });
-    }
-    await book.destroy();
-    await Activity.create({
+    const { data, error } = await supabase.from('books').select('*').eq('id', id);
+    if (error) throw error;
+    if (!data.length) return res.status(404).json({ error: 'Book not found' });
+    await supabase.from('books').delete().eq('id', id);
+    await supabase.from('activities').insert({
       type: 'book_deleted',
-      message: `Book "${book.name}" deleted from inventory`,
+      message: `Book "${data[0].name}" deleted from inventory`,
     });
     res.status(204).send();
   } catch (err) {
     console.error('Error deleting book:', err);
-    res.status(500).json({ error: 'Failed to delete book' });
+    res.status(500).json({ error: 'Failed to delete book', details: err.message });
   }
 });
 
+// Delete an order
 app.delete('/api/orders/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const order = await Order.findByPk(id);
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
-    await order.destroy();
-    await Activity.create({
+    const { data, error } = await supabase.from('orders').select('*').eq('id', id);
+    if (error) throw error;
+    if (!data.length) return res.status(404).json({ error: 'Order not found' });
+    await supabase.from('orders').delete().eq('id', id);
+    await supabase.from('activities').insert({
       type: 'order_deleted',
-      message: `Order from ${order.customerName} deleted`,
+      message: `Order from ${data[0].customer_name} deleted`,
     });
     res.status(204).send();
   } catch (err) {
     console.error('Error deleting order:', err);
-    res.status(500).json({ error: 'Failed to delete order' });
+    res.status(500).json({ error: 'Failed to delete order', details: err.message });
   }
 });
 
-startServer();
+// Start server (no database sync needed for Supabase)
+app.listen(5000, () => console.log('Server running on port 5000'));
