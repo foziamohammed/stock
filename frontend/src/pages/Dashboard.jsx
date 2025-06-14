@@ -6,24 +6,12 @@ import { Bar, Pie } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement } from 'chart.js';
 
 // Register ChartJS components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement
-);
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
 
 export default function Dashboard({ darkMode, setDarkMode }) {
-  const [summary, setSummary] = useState({
-    totalBooks: 0,
-    lowStock: 0,
-    totalOrders: 0,
-  });
+  const [summary, setSummary] = useState({ totalBooks: 0, lowStock: 0, totalOrders: 0 });
   const [chartData, setChartData] = useState(null);
-  const [activities, setActivities] = useState([]); // Added missing state
+  const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -33,31 +21,44 @@ export default function Dashboard({ darkMode, setDarkMode }) {
         setLoading(true);
         setError(null);
 
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        const API_URL = import.meta.env.VITE_API_URL;
+        if (!API_URL) throw new Error('API_URL is not defined');
 
         // Fetch summary data
         const summaryResponse = await fetch(`${API_URL}/api/dashboard-summary`);
-        if (!summaryResponse.ok) {
-          throw new Error(`Failed to fetch summary: ${summaryResponse.status}`);
-        }
+        if (!summaryResponse.ok) throw new Error(`Failed to fetch summary: ${summaryResponse.status}`);
         const summaryData = await summaryResponse.json();
+        if (!summaryData.totalBooks || !summaryData.lowStock || !summaryData.totalOrders) {
+          throw new Error('Invalid summary data format');
+        }
         setSummary(summaryData);
 
         // Fetch chart data
         const chartResponse = await fetch(`${API_URL}/api/chart-data`);
-        if (!chartResponse.ok) {
-          throw new Error(`Failed to fetch chart data: ${chartResponse.status}`);
-        }
-        const chartData = await chartResponse.json();
-        setChartData(chartData);
+        if (!chartResponse.ok) throw new Error(`Failed to fetch chart data: ${chartResponse.status}`);
+        const chartRawData = await chartResponse.json();
+        // Ensure chartData is in the expected format
+        const processedChartData = {
+          labels: chartRawData.labels || [],
+          datasets: chartRawData.datasets || [
+            {
+              label: 'Number of Books per Category',
+              data: chartRawData.data || [],
+              backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'],
+            },
+          ],
+        };
+        setChartData(processedChartData);
 
         // Fetch activities
         const activitiesResponse = await fetch(`${API_URL}/api/activities`);
-        if (!activitiesResponse.ok) {
-          throw new Error(`Failed to fetch activities: ${activitiesResponse.status}`);
-        }
+        if (!activitiesResponse.ok) throw new Error(`Failed to fetch activities: ${activitiesResponse.status}`);
         const activitiesData = await activitiesResponse.json();
-        setActivities(activitiesData);
+        // Adjust for Supabase's created_at field
+        setActivities(activitiesData.map(activity => ({
+          ...activity,
+          createdAt: activity.created_at || activity.createdAt, // Fallback to createdAt if exists
+        })));
 
       } catch (err) {
         console.error('Failed to fetch dashboard data:', err);
@@ -76,7 +77,7 @@ export default function Dashboard({ darkMode, setDarkMode }) {
     const activityDate = new Date(dateString);
     const diffInMs = now - activityDate;
     const diffInMinutes = Math.floor(diffInMs / 1000 / 60);
-    if (diffInMinutes < 1) return "Just now";
+    if (diffInMinutes < 1) return 'Just now';
     if (diffInMinutes < 60) return `${diffInMinutes} minute${diffInMinutes > 1 ? 's' : ''} ago`;
     const diffInHours = Math.floor(diffInMinutes / 60);
     if (diffInHours < 24) return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`;
@@ -86,11 +87,11 @@ export default function Dashboard({ darkMode, setDarkMode }) {
 
   // Map activity types to icons and colors
   const activityStyles = {
-    book_added: { icon: <FiPieChart className="text-pink-600 dark:text-pink-300" />, bg: "bg-pink-100 dark:bg-pink-900" },
-    book_updated: { icon: <FiPieChart className="text-blue-600 dark:text-blue-300" />, bg: "bg-blue-100 dark:bg-blue-900" },
-    book_deleted: { icon: <FiPieChart className="text-red-600 dark:text-red-300" />, bg: "bg-red-100 dark:bg-red-900" },
-    order_received: { icon: <FiCreditCard className="text-green-600 dark:text-green-300" />, bg: "bg-green-100 dark:bg-green-900" },
-    order_deleted: { icon: <FiCreditCard className="text-red-600 dark:text-red-300" />, bg: "bg-red-100 dark:bg-red-900" },
+    book_added: { icon: <FiPieChart className="text-pink-600 dark:text-pink-300" />, bg: 'bg-pink-100 dark:bg-pink-900' },
+    book_updated: { icon: <FiPieChart className="text-blue-600 dark:text-blue-300" />, bg: 'bg-blue-100 dark:bg-blue-900' },
+    book_deleted: { icon: <FiPieChart className="text-red-600 dark:text-red-300" />, bg: 'bg-red-100 dark:bg-red-900' },
+    order_received: { icon: <FiCreditCard className="text-green-600 dark:text-green-300" />, bg: 'bg-green-100 dark:bg-green-900' },
+    order_deleted: { icon: <FiCreditCard className="text-red-600 dark:text-red-300" />, bg: 'bg-red-100 dark:bg-red-900' },
   };
 
   if (loading) {
@@ -120,7 +121,7 @@ export default function Dashboard({ darkMode, setDarkMode }) {
           <NavLink
             to="/"
             className={({ isActive }) =>
-              `flex items-center gap-3 ${isActive ? "text-pink-600 dark:text-pink-400 font-semibold" : "hover:text-pink-500 dark:hover:text-pink-300"}`
+              `flex items-center gap-3 ${isActive ? 'text-pink-600 dark:text-pink-400 font-semibold' : 'hover:text-pink-500 dark:hover:text-pink-300'}`
             }
           >
             <FiHome /> Dashboard
@@ -128,7 +129,7 @@ export default function Dashboard({ darkMode, setDarkMode }) {
           <NavLink
             to="/products"
             className={({ isActive }) =>
-              `flex items-center gap-3 ${isActive ? "text-pink-600 dark:text-pink-400 font-semibold" : "hover:text-pink-500 dark:hover:text-pink-300"}`
+              `flex items-center gap-3 ${isActive ? 'text-pink-600 dark:text-pink-400 font-semibold' : 'hover:text-pink-500 dark:hover:text-pink-300'}`
             }
           >
             <FiPieChart /> Products
@@ -136,7 +137,7 @@ export default function Dashboard({ darkMode, setDarkMode }) {
           <NavLink
             to="/orders"
             className={({ isActive }) =>
-              `flex items-center gap-3 ${isActive ? "text-pink-600 dark:text-pink-400 font-semibold" : "hover:text-pink-500 dark:hover:text-pink-300"}`
+              `flex items-center gap-3 ${isActive ? 'text-pink-600 dark:text-pink-400 font-semibold' : 'hover:text-pink-500 dark:hover:text-pink-300'}`
             }
           >
             <FiCreditCard /> Orders
@@ -144,7 +145,7 @@ export default function Dashboard({ darkMode, setDarkMode }) {
           <NavLink
             to="/account"
             className={({ isActive }) =>
-              `flex items-center gap-3 ${isActive ? "text-pink-600 dark:text-pink-400 font-semibold" : "hover:text-pink-500 dark:hover:text-pink-300"}`
+              `flex items-center gap-3 ${isActive ? 'text-pink-600 dark:text-pink-400 font-semibold' : 'hover:text-pink-500 dark:hover:text-pink-300'}`
             }
           >
             <FiUser /> Account
@@ -152,7 +153,7 @@ export default function Dashboard({ darkMode, setDarkMode }) {
           <NavLink
             to="/settings"
             className={({ isActive }) =>
-              `flex items-center gap-3 ${isActive ? "text-pink-600 dark:text-pink-400 font-semibold" : "hover:text-pink-500 dark:hover:text-pink-300"}`
+              `flex items-center gap-3 ${isActive ? 'text-pink-600 dark:text-pink-400 font-semibold' : 'hover:text-pink-500 dark:hover:text-pink-300'}`
             }
           >
             <FiSettings /> Settings
@@ -163,7 +164,7 @@ export default function Dashboard({ darkMode, setDarkMode }) {
           <NavLink
             to="/security"
             className={({ isActive }) =>
-              `flex items-center gap-3 ${isActive ? "text-pink-600 dark:text-pink-400 font-semibold" : "hover:text-pink-500 dark:hover:text-pink-300"}`
+              `flex items-center gap-3 ${isActive ? 'text-pink-600 dark:text-pink-400 font-semibold' : 'hover:text-pink-500 dark:hover:text-pink-300'}`
             }
           >
             <FiShield /> Security
@@ -171,7 +172,7 @@ export default function Dashboard({ darkMode, setDarkMode }) {
           <NavLink
             to="/help"
             className={({ isActive }) =>
-              `flex items-center gap-3 ${isActive ? "text-pink-600 dark:text-pink-400 font-semibold" : "hover:text-pink-500 dark:hover:text-pink-300"}`
+              `flex items-center gap-3 ${isActive ? 'text-pink-600 dark:text-pink-400 font-semibold' : 'hover:text-pink-500 dark:hover:text-pink-300'}`
             }
           >
             <FiHelpCircle /> Help Center
@@ -179,16 +180,16 @@ export default function Dashboard({ darkMode, setDarkMode }) {
         </nav>
         <div
           onClick={() => setDarkMode(!darkMode)}
-          className={`flex items-center gap-3 py-4 cursor-pointer ${darkMode ? "text-pink-600 dark:text-pink-400 font-semibold" : "hover:text-pink-500 dark:hover:text-pink-300"}`}
+          className={`flex items-center gap-3 py-4 cursor-pointer ${darkMode ? 'text-pink-600 dark:text-pink-400 font-semibold' : 'hover:text-pink-500 dark:hover:text-pink-300'}`}
         >
-          <BsMoonStars /> {darkMode ? "Light Mode" : "Dark Mode"}
+          <BsMoonStars /> {darkMode ? 'Light Mode' : 'Dark Mode'}
         </div>
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 p-6 overflow-auto">
         <h1 className="text-2xl font-bold mb-6">Dashboard Overview</h1>
-        
+
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md shadow-top">
@@ -215,7 +216,7 @@ export default function Dashboard({ darkMode, setDarkMode }) {
             </div>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md  ">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-500 dark:text-gray-400">Total Orders</p>
@@ -243,7 +244,7 @@ export default function Dashboard({ darkMode, setDarkMode }) {
                       position: 'top',
                       labels: {
                         color: darkMode ? '#E5E7EB' : '#374151',
-                      }
+                      },
                     },
                   },
                   scales: {
@@ -262,9 +263,9 @@ export default function Dashboard({ darkMode, setDarkMode }) {
                       },
                       grid: {
                         color: darkMode ? 'rgba(229, 231, 235, 0.1)' : 'rgba(55, 65, 81, 0.1)',
-                      }
-                    }
-                  }
+                      },
+                    },
+                  },
                 }}
               />
             ) : (
@@ -275,7 +276,7 @@ export default function Dashboard({ darkMode, setDarkMode }) {
           </div>
 
           {/* Books by Category (Pie Chart) */}
-          <div className="bg-[#f3f4f6] dark:bg-gray-800 p-6 rounded-lg shadow-md ">
+          <div className="bg-[#f3f4f6] dark:bg-gray-800 p-6 rounded-lg shadow-md">
             <h3 className="text-lg font-semibold mb-4">Category Distribution</h3>
             {chartData ? (
               <Pie
@@ -287,7 +288,7 @@ export default function Dashboard({ darkMode, setDarkMode }) {
                       position: 'right',
                       labels: {
                         color: darkMode ? '#E5E7EB' : '#374151',
-                      }
+                      },
                     },
                   },
                 }}
@@ -314,7 +315,7 @@ export default function Dashboard({ darkMode, setDarkMode }) {
               activities.map((activity) => {
                 const style = activityStyles[activity.type] || {
                   icon: <FiPieChart className="text-gray-600 dark:text-gray-300" />,
-                  bg: "bg-gray-100 dark:bg-gray-700",
+                  bg: 'bg-gray-100 dark:bg-gray-700',
                 };
                 return (
                   <div

@@ -16,11 +16,11 @@ import {
 import { BsMoonStars } from "react-icons/bs";
 
 // Dynamically set today's date in DD/MM/YYYY format
-const today = new Date().toLocaleDateString('en-GB', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-}).split('/').join('/'); // Format: 05/06/2025
+const today = new Date().toLocaleDateString("en-GB", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+}).split("/").join("/"); // Format: 14/06/2025
 
 export default function Orders({ darkMode, setDarkMode }) {
   const [orders, setOrders] = useState([]);
@@ -32,11 +32,11 @@ export default function Orders({ darkMode, setDarkMode }) {
   const [error, setError] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [newOrder, setNewOrder] = useState({
-    bookName: '',
-    quantity: '',
-    customerName: '',
-    category: '', // Added category field
-    status: 'active',
+    bookName: "",
+    quantity: "",
+    customerName: "",
+    category: "", // Added category field
+    status: "active",
   });
   const [filterStatus, setFilterStatus] = useState("All");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -62,20 +62,29 @@ export default function Orders({ darkMode, setDarkMode }) {
     try {
       setLoading(true);
       setError(null);
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const API_URL = import.meta.env.VITE_API_URL;
+      if (!API_URL) throw new Error("API_URL is not defined");
       const response = await fetch(`${API_URL}/api/orders`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
       const data = await response.json();
       if (Array.isArray(data)) {
-        setOrders(data);
+        // Map Supabase fields to frontend-friendly names
+        const mappedOrders = data.map((order) => ({
+          id: order.id,
+          bookName: order.book_name,
+          quantity: order.quantity,
+          customerName: order.customer_name,
+          category: order.category || "N/A",
+          orderDate: order.order_date,
+          status: order.status,
+        }));
+        setOrders(mappedOrders);
       } else {
-        throw new Error('Fetched data is not an array');
+        throw new Error("Fetched data is not an array");
       }
     } catch (err) {
-      console.error('Failed to fetch orders:', err);
-      setError('Failed to fetch orders from the server.');
+      console.error("Failed to fetch orders:", err);
+      setError("Failed to fetch orders from the server.");
       setOrders([]);
     } finally {
       setLoading(false);
@@ -84,9 +93,7 @@ export default function Orders({ darkMode, setDarkMode }) {
 
   const toggleSelect = (index) => {
     setSelectedOrders((prev) =>
-      prev.includes(index)
-        ? prev.filter((i) => i !== index)
-        : [...prev, index]
+      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
     );
   };
 
@@ -100,67 +107,81 @@ export default function Orders({ darkMode, setDarkMode }) {
   };
 
   const handleAddOrder = async () => {
-    if (!newOrder.bookName || !newOrder.quantity || !newOrder.customerName || !newOrder.category || !selectedDate || !newOrder.status) {
+    if (
+      !newOrder.bookName ||
+      !newOrder.quantity ||
+      !newOrder.customerName ||
+      !newOrder.category ||
+      !selectedDate ||
+      !newOrder.status
+    ) {
       alert("Please fill in all fields.");
       return;
     }
-    const formattedDate = selectedDate.toISOString().split('T')[0];
+    const formattedDate = selectedDate.toISOString().split("T")[0]; // YYYY-MM-DD
     const payload = {
-      bookName: newOrder.bookName.trim(),
-      quantity: newOrder.quantity,
-      customerName: newOrder.customerName,
-      category: newOrder.category.trim(), // Added category to payload
-      orderDate: formattedDate,
+      book_name: newOrder.bookName.trim(),
+      quantity: parseInt(newOrder.quantity),
+      customer_name: newOrder.customerName,
+      category: newOrder.category.trim(),
+      order_date: formattedDate,
       status: newOrder.status,
     };
     try {
       console.log(`[${new Date().toISOString()}] Sending new order:`, payload);
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const API_URL = import.meta.env.VITE_API_URL;
       const response = await fetch(`${API_URL}/api/orders`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (response.ok) {
         fetchOrders();
         setNewOrder({
-          bookName: '',
-          quantity: '',
-          customerName: '',
-          category: '', // Reset category
-          status: 'active',
+          bookName: "",
+          quantity: "",
+          customerName: "",
+          category: "",
+          status: "active",
         });
         setSelectedDate(new Date());
         setIsModalOpen(false);
       } else {
         const errorData = await response.json();
-        alert(`Failed to add order: ${errorData.error}`);
+        alert(`Failed to add order: ${errorData.error || "Server error"}`);
       }
     } catch (err) {
-      console.error('Error adding order:', err);
-      alert('Error adding order to the server.');
+      console.error("Error adding order:", err);
+      alert("Error adding order to the server.");
     }
   };
 
   const handleEditOrder = async () => {
-    if (!editOrder.bookName || !editOrder.quantity || !editOrder.customerName || !editOrder.category || !selectedDate || !editOrder.status) {
+    if (
+      !editOrder.bookName ||
+      !editOrder.quantity ||
+      !editOrder.customerName ||
+      !editOrder.category ||
+      !selectedDate ||
+      !editOrder.status
+    ) {
       alert("Please fill in all fields.");
       return;
     }
-    const formattedDate = selectedDate.toISOString().split('T')[0];
+    const formattedDate = selectedDate.toISOString().split("T")[0]; // YYYY-MM-DD
     const payload = {
-      bookName: editOrder.bookName.trim(),
-      quantity: editOrder.quantity,
-      customerName: editOrder.customerName,
-      category: editOrder.category.trim(), // Added category to payload
-      orderDate: formattedDate,
+      book_name: editOrder.bookName.trim(),
+      quantity: parseInt(editOrder.quantity),
+      customer_name: editOrder.customerName,
+      category: editOrder.category.trim(),
+      order_date: formattedDate,
       status: editOrder.status,
     };
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const API_URL = import.meta.env.VITE_API_URL;
       const response = await fetch(`${API_URL}/api/orders/${editOrder.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (response.ok) {
@@ -170,16 +191,24 @@ export default function Orders({ darkMode, setDarkMode }) {
         setIsEditModalOpen(false);
       } else {
         const errorData = await response.json();
-        alert(`Failed to update order: ${errorData.error}`);
+        alert(`Failed to update order: ${errorData.error || "Server error"}`);
       }
     } catch (err) {
-      console.error('Error updating order:', err);
-      alert('Error updating order on the server.');
+      console.error("Error updating order:", err);
+      alert("Error updating order on the server.");
     }
   };
 
   const openEditModal = (order) => {
-    setEditOrder(order);
+    setEditOrder({
+      id: order.id,
+      bookName: order.bookName,
+      quantity: order.quantity,
+      customerName: order.customerName,
+      category: order.category,
+      orderDate: order.orderDate,
+      status: order.status,
+    });
     setSelectedDate(new Date(order.orderDate));
     setIsEditModalOpen(true);
   };
@@ -190,11 +219,11 @@ export default function Orders({ darkMode, setDarkMode }) {
       return;
     }
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const API_URL = import.meta.env.VITE_API_URL;
       const deletePromises = selectedOrders.map(async (index) => {
         const orderId = filteredOrders[index].id;
         const response = await fetch(`${API_URL}/api/orders/${orderId}`, {
-          method: 'DELETE',
+          method: "DELETE",
         });
         if (!response.ok) {
           throw new Error(`Failed to delete order with ID ${orderId}`);
@@ -204,8 +233,8 @@ export default function Orders({ darkMode, setDarkMode }) {
       fetchOrders();
       setSelectedOrders([]);
     } catch (err) {
-      console.error('Error deleting orders:', err);
-      alert('Error deleting selected orders.');
+      console.error("Error deleting orders:", err);
+      alert("Error deleting selected orders.");
     }
   };
 
@@ -230,11 +259,18 @@ export default function Orders({ darkMode, setDarkMode }) {
     "Cancelled": "cancelled",
   };
 
-  const uniqueStatuses = ["All", ...new Set(orders.map((order) => statusDisplayMap[order.status] || order.status))];
+  const uniqueStatuses = [
+    "All",
+    ...new Set(orders.map((order) => statusDisplayMap[order.status] || order.status)),
+  ];
 
   const filteredOrders = filterStatus === "All"
     ? orders
-    : orders.filter((order) => order.status === statusValueMap[filterStatus] || order.status === filterStatus.toLowerCase());
+    : orders.filter(
+        (order) =>
+          order.status === statusValueMap[filterStatus] ||
+          order.status === filterStatus.toLowerCase()
+      );
 
   return (
     <div>
@@ -243,14 +279,18 @@ export default function Orders({ darkMode, setDarkMode }) {
         <div className="fixed inset-0 flex items-center justify-center bg-white/80 z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md shadow-lg">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Add New Order</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Add New Order
+              </h3>
               <button onClick={() => setIsModalOpen(false)}>
                 <X className="w-5 h-5 text-gray-700 dark:text-gray-300" />
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Book Name</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Book Name
+                </label>
                 <input
                   type="text"
                   name="bookName"
@@ -261,7 +301,9 @@ export default function Orders({ darkMode, setDarkMode }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Quantity</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Quantity
+                </label>
                 <input
                   type="number"
                   name="quantity"
@@ -272,7 +314,9 @@ export default function Orders({ darkMode, setDarkMode }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Customer Name</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Customer Name
+                </label>
                 <input
                   type="text"
                   name="customerName"
@@ -283,7 +327,9 @@ export default function Orders({ darkMode, setDarkMode }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Category
+                </label>
                 <input
                   type="text"
                   name="category"
@@ -294,17 +340,21 @@ export default function Orders({ darkMode, setDarkMode }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Order Date</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Order Date
+                </label>
                 <DatePicker
                   selected={selectedDate}
                   onChange={(date) => setSelectedDate(date)}
-                  dateFormat="dd/MM/yyyy"
+                  dateFormat="yyyy-MM-dd" // Match backend's expected format
                   className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-pink-500 focus:border-pink-500"
                   placeholderText="Select date"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Status
+                </label>
                 <select
                   name="status"
                   value={newOrder.status}
@@ -342,14 +392,18 @@ export default function Orders({ darkMode, setDarkMode }) {
         <div className="fixed inset-0 flex items-center justify-center bg-white/80 z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md shadow-lg">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Edit Order</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Edit Order
+              </h3>
               <button onClick={() => setIsEditModalOpen(false)}>
                 <X className="w-5 h-5 text-gray-700 dark:text-gray-300" />
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Book Name</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Book Name
+                </label>
                 <input
                   type="text"
                   name="bookName"
@@ -360,7 +414,9 @@ export default function Orders({ darkMode, setDarkMode }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Quantity</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Quantity
+                </label>
                 <input
                   type="number"
                   name="quantity"
@@ -371,7 +427,9 @@ export default function Orders({ darkMode, setDarkMode }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Customer Name</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Customer Name
+                </label>
                 <input
                   type="text"
                   name="customerName"
@@ -382,7 +440,9 @@ export default function Orders({ darkMode, setDarkMode }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Category
+                </label>
                 <input
                   type="text"
                   name="category"
@@ -393,17 +453,21 @@ export default function Orders({ darkMode, setDarkMode }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Order Date</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Order Date
+                </label>
                 <DatePicker
                   selected={selectedDate}
                   onChange={(date) => setSelectedDate(date)}
-                  dateFormat="dd/MM/yyyy"
+                  dateFormat="yyyy-MM-dd" // Match backend's expected format
                   className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-pink-500 focus:border-pink-500"
                   placeholderText="Select date"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Status
+                </label>
                 <select
                   name="status"
                   value={editOrder.status}
@@ -426,7 +490,7 @@ export default function Orders({ darkMode, setDarkMode }) {
                 Cancel
               </Button>
               <Button
-                className="bg-pink-600 text-white hover:bg-pink-700 dark:bg-pink-700 dark:hover:bg-pink-800"
+                className="bg-pink-600 text-white hover:bg-pink-700 dark:hover:bg-pink-800"
                 onClick={handleEditOrder}
               >
                 Save Changes
@@ -439,7 +503,9 @@ export default function Orders({ darkMode, setDarkMode }) {
       <div className="flex min-h-screen bg-gray-100 dark:bg-[#0e1525] text-gray-900 dark:text-gray-100">
         <aside className="w-64 p-6 bg-white/30 dark:bg-gray-800/30 backdrop-blur-md shadow-md border border-white/20 dark:border-gray-700 rounded-tr-3xl rounded-br-3xl">
           <div className="mb-10">
-            <div className="text-3xl font-bold text-pink-600 dark:text-pink-400">📚Perfect Books</div>
+            <div className="text-3xl font-bold text-pink-600 dark:text-pink-400">
+              📚Perfect Books
+            </div>
           </div>
           <nav className="space-y-5 text-gray-700 dark:text-gray-300 text-[15px] font-medium">
             <NavLink
@@ -510,8 +576,12 @@ export default function Orders({ darkMode, setDarkMode }) {
         <main className="flex-1 p-6 overflow-auto">
           <div className="flex justify-between items-center mb-4">
             <div>
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Orders</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Customer requests for new imported books</p>
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                Orders
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Customer requests for new imported books
+              </p>
             </div>
             <div className="flex gap-2">
               <Button
@@ -559,11 +629,19 @@ export default function Orders({ darkMode, setDarkMode }) {
                     <input type="checkbox" />
                   </th>
                   <th className="p-3 text-left text-gray-700 dark:text-gray-300">Book</th>
-                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">Quantity</th>
-                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">Customer</th>
-                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">Category</th>
+                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">
+                    Quantity
+                  </th>
+                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">
+                    Customer
+                  </th>
+                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">
+                    Category
+                  </th>
                   <th className="p-3 text-left text-gray-700 dark:text-gray-300">Date</th>
-                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">Status</th>
+                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">
+                    Status
+                  </th>
                   <th className="p-3 text-right text-gray-700 dark:text-gray-300"></th>
                 </tr>
               </thead>
@@ -602,15 +680,23 @@ export default function Orders({ darkMode, setDarkMode }) {
                       <td className="p-3 font-semibold text-gray-900 dark:text-gray-100">
                         {order.bookName}
                       </td>
-                      <td className="p-3 text-gray-700 dark:text-gray-300">{order.quantity}</td>
-                      <td className="p-3 text-gray-700 dark:text-gray-300">{order.customerName}</td>
-                      <td className="p-3 text-gray-700 dark:text-gray-300">{order.category || 'N/A'}</td>
                       <td className="p-3 text-gray-700 dark:text-gray-300">
-                        {order.orderDate ? new Date(order.orderDate).toLocaleDateString('en-GB', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                        }).split('/').join('/') : 'N/A'}
+                        {order.quantity}
+                      </td>
+                      <td className="p-3 text-gray-700 dark:text-gray-300">
+                        {order.customerName}
+                      </td>
+                      <td className="p-3 text-gray-700 dark:text-gray-300">
+                        {order.category}
+                      </td>
+                      <td className="p-3 text-gray-700 dark:text-gray-300">
+                        {order.orderDate
+                          ? new Date(order.orderDate).toLocaleDateString("en-GB", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                            })
+                          : "N/A"}
                       </td>
                       <td className="p-3 text-gray-700 dark:text-gray-300">
                         {statusDisplayMap[order.status] || order.status}

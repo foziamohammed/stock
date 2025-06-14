@@ -16,18 +16,18 @@ import {
 import { BsMoonStars } from "react-icons/bs";
 
 // Dynamically set today's date in DD/MM/YYYY format
-const today = new Date().toLocaleDateString('en-GB', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-}).split('/').join('/'); // Format: 05/06/2025
+const today = new Date().toLocaleDateString("en-GB", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+}).split("/").join("/"); // Format: 14/06/2025
 
 export default function Products({ darkMode, setDarkMode }) {
   const [items, setItems] = useState([]);
   const [selectedItems, setSelectedItems] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false); // New state for edit modal
-  const [editItem, setEditItem] = useState(null); // State to store the item being edited
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editItem, setEditItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -41,12 +41,10 @@ export default function Products({ darkMode, setDarkMode }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  // Fetch books from the backend on component mount
   useEffect(() => {
     fetchBooks();
   }, []);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -63,20 +61,28 @@ export default function Products({ darkMode, setDarkMode }) {
     try {
       setLoading(true);
       setError(null);
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const API_URL = import.meta.env.VITE_API_URL;
+      if (!API_URL) throw new Error("API_URL is not defined");
       const response = await fetch(`${API_URL}/api/books`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
       const data = await response.json();
       if (Array.isArray(data)) {
-        setItems(data);
+        // Map Supabase fields to frontend-friendly names
+        const mappedItems = data.map((item) => ({
+          id: item.id,
+          name: item.book_name,
+          category: item.category || "N/A",
+          amount: item.quantity,
+          cost: item.price || item.cost, // Fallback to cost if price exists
+          date: item.date_added || item.date, // Fallback to date if date_added exists
+        }));
+        setItems(mappedItems);
       } else {
-        throw new Error('Fetched data is not an array');
+        throw new Error("Fetched data is not an array");
       }
     } catch (err) {
-      console.error('Failed to fetch books:', err);
-      setError('Failed to fetch books from the server.');
+      console.error("Failed to fetch books:", err);
+      setError("Failed to fetch books from the server.");
       setItems([]);
     } finally {
       setLoading(false);
@@ -85,9 +91,7 @@ export default function Products({ darkMode, setDarkMode }) {
 
   const toggleSelect = (index) => {
     setSelectedItems((prev) =>
-      prev.includes(index)
-        ? prev.filter((i) => i !== index)
-        : [...prev, index]
+      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
     );
   };
 
@@ -105,17 +109,21 @@ export default function Products({ darkMode, setDarkMode }) {
       alert("Please fill in all fields.");
       return;
     }
-
-    const formattedDate = selectedDate.toISOString().split('T')[0];
-    
+    const formattedDate = selectedDate.toISOString().split("T")[0]; // YYYY-MM-DD
+    const payload = {
+      book_name: newItem.name.trim(),
+      category: newItem.category.trim(),
+      quantity: parseInt(newItem.amount),
+      price: parseFloat(newItem.cost), // Assuming cost is price in Supabase
+      date_added: formattedDate,
+    };
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const API_URL = import.meta.env.VITE_API_URL;
       const response = await fetch(`${API_URL}/api/books`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...newItem, date: formattedDate }),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
-      
       if (response.ok) {
         fetchBooks();
         setNewItem({
@@ -128,11 +136,11 @@ export default function Products({ darkMode, setDarkMode }) {
         setIsModalOpen(false);
       } else {
         const errorData = await response.json();
-        alert(`Failed to add book: ${errorData.error}`);
+        alert(`Failed to add book: ${errorData.error || "Server error"}`);
       }
     } catch (err) {
-      console.error('Error adding book:', err);
-      alert('Error adding book to the server.');
+      console.error("Error adding book:", err);
+      alert("Error adding book to the server.");
     }
   };
 
@@ -141,22 +149,21 @@ export default function Products({ darkMode, setDarkMode }) {
       alert("Please fill in all fields.");
       return;
     }
-
-    const formattedDate = selectedDate.toISOString().split('T')[0];
-    
+    const formattedDate = selectedDate.toISOString().split("T")[0]; // YYYY-MM-DD
+    const payload = {
+      book_name: editItem.name.trim(),
+      category: editItem.category.trim(),
+      quantity: parseInt(editItem.amount),
+      price: parseFloat(editItem.cost),
+      date_added: formattedDate,
+    };
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const API_URL = import.meta.env.VITE_API_URL;
       const response = await fetch(`${API_URL}/api/books/${editItem.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...editItem, date: formattedDate }),
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
-
-      if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
-    }
-      
       if (response.ok) {
         fetchBooks();
         setEditItem(null);
@@ -164,16 +171,23 @@ export default function Products({ darkMode, setDarkMode }) {
         setIsEditModalOpen(false);
       } else {
         const errorData = await response.json();
-        alert(`Failed to update book: ${errorData.error}`);
+        alert(`Failed to update book: ${errorData.error || "Server error"}`);
       }
     } catch (err) {
-      console.error('Error updating book:', err);
-      alert('Error updating book on the server. ${err.message}');
+      console.error("Error updating book:", err);
+      alert("Error updating book on the server.");
     }
   };
 
   const openEditModal = (item) => {
-    setEditItem(item);
+    setEditItem({
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      amount: item.amount,
+      cost: item.cost,
+      date: item.date,
+    });
     setSelectedDate(new Date(item.date));
     setIsEditModalOpen(true);
   };
@@ -184,10 +198,11 @@ export default function Products({ darkMode, setDarkMode }) {
       return;
     }
     try {
+      const API_URL = import.meta.env.VITE_API_URL;
       const deletePromises = selectedItems.map(async (index) => {
         const itemId = filteredItems[index].id;
         const response = await fetch(`${API_URL}/api/books/${itemId}`, {
-          method: 'DELETE',
+          method: "DELETE",
         });
         if (!response.ok) {
           throw new Error(`Failed to delete book with ID ${itemId}`);
@@ -197,8 +212,8 @@ export default function Products({ darkMode, setDarkMode }) {
       fetchBooks();
       setSelectedItems([]);
     } catch (err) {
-      console.error('Error deleting books:', err);
-      alert('Error deleting selected books.');
+      console.error("Error deleting books:", err);
+      alert("Error deleting selected books.");
     }
   };
 
@@ -209,9 +224,7 @@ export default function Products({ darkMode, setDarkMode }) {
 
   const uniqueCategories = ["All", ...new Set(items.map((item) => item.category))];
 
-  const filteredItems = filterCategory === "All"
-    ? items
-    : items.filter((item) => item.category === filterCategory);
+  const filteredItems = filterCategory === "All" ? items : items.filter((item) => item.category === filterCategory);
 
   return (
     <div>
@@ -220,14 +233,18 @@ export default function Products({ darkMode, setDarkMode }) {
         <div className="fixed inset-0 flex items-center justify-center bg-white/80 z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md shadow-lg">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Add New Item</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Add New Item
+              </h3>
               <button onClick={() => setIsModalOpen(false)}>
                 <X className="w-5 h-5 text-gray-700 dark:text-gray-300" />
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Name
+                </label>
                 <input
                   type="text"
                   name="name"
@@ -238,7 +255,9 @@ export default function Products({ darkMode, setDarkMode }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Category
+                </label>
                 <input
                   type="text"
                   name="category"
@@ -249,7 +268,9 @@ export default function Products({ darkMode, setDarkMode }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Amount</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Amount
+                </label>
                 <input
                   type="number"
                   name="amount"
@@ -260,7 +281,9 @@ export default function Products({ darkMode, setDarkMode }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Cost</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Cost
+                </label>
                 <input
                   type="number"
                   step="0.01"
@@ -272,11 +295,13 @@ export default function Products({ darkMode, setDarkMode }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Date</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Date
+                </label>
                 <DatePicker
                   selected={selectedDate}
                   onChange={(date) => setSelectedDate(date)}
-                  dateFormat="dd/MM/yyyy"
+                  dateFormat="yyyy-MM-dd" // Match backend's expected format
                   className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-pink-500 focus:border-pink-500"
                   placeholderText="Select date"
                 />
@@ -306,14 +331,18 @@ export default function Products({ darkMode, setDarkMode }) {
         <div className="fixed inset-0 flex items-center justify-center bg-white/80 z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md shadow-lg">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Edit Item</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Edit Item
+              </h3>
               <button onClick={() => setIsEditModalOpen(false)}>
                 <X className="w-5 h-5 text-gray-700 dark:text-gray-300" />
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Name
+                </label>
                 <input
                   type="text"
                   name="name"
@@ -324,7 +353,9 @@ export default function Products({ darkMode, setDarkMode }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Category
+                </label>
                 <input
                   type="text"
                   name="category"
@@ -335,7 +366,9 @@ export default function Products({ darkMode, setDarkMode }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Amount</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Amount
+                </label>
                 <input
                   type="number"
                   name="amount"
@@ -346,7 +379,9 @@ export default function Products({ darkMode, setDarkMode }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Cost</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Cost
+                </label>
                 <input
                   type="number"
                   step="0.01"
@@ -358,11 +393,13 @@ export default function Products({ darkMode, setDarkMode }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Date</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Date
+                </label>
                 <DatePicker
                   selected={selectedDate}
                   onChange={(date) => setSelectedDate(date)}
-                  dateFormat="dd/MM/yyyy"
+                  dateFormat="yyyy-MM-dd" // Match backend's expected format
                   className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-pink-500 focus:border-pink-500"
                   placeholderText="Select date"
                 />
@@ -390,7 +427,9 @@ export default function Products({ darkMode, setDarkMode }) {
       <div className="flex min-h-screen bg-gray-100 dark:bg-[#0e1525] text-gray-900 dark:text-gray-100">
         <aside className="w-64 p-6 bg-white/30 dark:bg-gray-800/30 backdrop-blur-md shadow-md border border-white/20 dark:border-gray-700 rounded-tr-3xl rounded-br-3xl">
           <div className="mb-10">
-            <div className="text-3xl font-bold text-pink-600 dark:text-pink-400">📚Perfect Books</div>
+            <div className="text-3xl font-bold text-pink-600 dark:text-pink-400">
+              📚Perfect Books
+            </div>
           </div>
           <nav className="space-y-5 text-gray-700 dark:text-gray-300 text-[15px] font-medium">
             <NavLink
@@ -463,8 +502,12 @@ export default function Products({ darkMode, setDarkMode }) {
         <main className="flex-1 p-6 overflow-auto">
           <div className="flex justify-between items-center mb-4">
             <div>
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Products</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Manage your book inventory</p>
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                Products
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Manage your book inventory
+              </p>
             </div>
             <div className="flex gap-2">
               <Button
@@ -513,10 +556,18 @@ export default function Products({ darkMode, setDarkMode }) {
                     <input type="checkbox" />
                   </th>
                   <th className="p-3 text-left text-gray-700 dark:text-gray-300">Book</th>
-                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">Category</th>
-                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">Amount</th>
-                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">Cost</th>
-                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">Date</th>
+                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">
+                    Category
+                  </th>
+                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">
+                    Amount
+                  </th>
+                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">
+                    Cost
+                  </th>
+                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">
+                    Date
+                  </th>
                   <th className="p-3 text-right text-gray-700 dark:text-gray-300"></th>
                 </tr>
               </thead>
@@ -555,11 +606,19 @@ export default function Products({ darkMode, setDarkMode }) {
                       <td className="p-3 font-semibold text-gray-900 dark:text-gray-100">
                         {item.name}
                       </td>
-                      <td className="p-3 text-gray-700 dark:text-gray-300">{item.category}</td>
-                      <td className="p-3 text-gray-700 dark:text-gray-300">{item.amount}</td>
-                      <td className="p-3 text-gray-700 dark:text-gray-300">{item.cost}</td>
                       <td className="p-3 text-gray-700 dark:text-gray-300">
-                        {item.date ? new Date(item.date).toLocaleDateString('en-GB') : 'N/A'}
+                        {item.category}
+                      </td>
+                      <td className="p-3 text-gray-700 dark:text-gray-300">
+                        {item.amount}
+                      </td>
+                      <td className="p-3 text-gray-700 dark:text-gray-300">
+                        {item.cost}
+                      </td>
+                      <td className="p-3 text-gray-700 dark:text-gray-300">
+                        {item.date
+                          ? new Date(item.date).toLocaleDateString("en-GB")
+                          : "N/A"}
                       </td>
                       <td className="p-3 text-right">
                         <MoreVertical
