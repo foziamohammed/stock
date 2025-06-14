@@ -61,7 +61,7 @@ app.get('/api/chart-data', async (req, res) => {
     if (error) throw error;
     const categoryData = data.reduce((acc, book) => {
       const category = book.category || 'Uncategorized';
-      acc[category] = (acc[category] || 0) + (book.amount || 0);
+      acc[category] = (acc[category] || 0) + (book.quantity || 0); // Changed from amount to quantity
       return acc;
     }, {});
     const chartData = {
@@ -88,8 +88,8 @@ app.get('/api/dashboard-summary', async (req, res) => {
     if (booksError) throw booksError;
     const { data: orders, error: ordersError } = await supabase.from('orders').select('*');
     if (ordersError) throw ordersError;
-    const totalBooks = books.reduce((sum, book) => sum + (book.amount || 0), 0);
-    const lowStock = books.filter(book => book.amount < 50).length;
+    const totalBooks = books.length; // Count of books, not sum of quantities
+    const lowStock = books.filter(book => book.quantity < 5).length; // Changed to quantity, lowered threshold to 5
     const totalOrders = orders.length;
     const summary = { totalBooks, lowStock, totalOrders };
     res.json(summary);
@@ -112,7 +112,7 @@ app.post('/api/books', async (req, res) => {
     }
     const { data, error } = await supabase
       .from('books')
-      .insert({ name, category, amount, cost, date })
+      .insert({ book_name: name, category, quantity: amount, price: cost, date_added: date }) // Changed field names
       .select();
     if (error) throw error;
     await supabase.from('activities').insert({
@@ -140,7 +140,7 @@ app.put('/api/books/:id', async (req, res) => {
     }
     const { data, error } = await supabase
       .from('books')
-      .update({ name, category, amount, cost, date })
+      .update({ book_name: name, category, quantity: amount, price: cost, date_added: date }) // Changed field names
       .eq('id', id)
       .select();
     if (error) throw error;
@@ -226,7 +226,7 @@ app.delete('/api/books/:id', async (req, res) => {
     await supabase.from('books').delete().eq('id', id);
     await supabase.from('activities').insert({
       type: 'book_deleted',
-      message: `Book "${data[0].name}" deleted from inventory`,
+      message: `Book "${data[0].book_name}" deleted from inventory`, // Changed from name to book_name
     });
     res.status(204).send();
   } catch (err) {
@@ -245,7 +245,7 @@ app.delete('/api/orders/:id', async (req, res) => {
     await supabase.from('orders').delete().eq('id', id);
     await supabase.from('activities').insert({
       type: 'order_deleted',
-      message: `Order from ${data[0].customer_name} deleted`,
+      message: `Order from ${data[0].customer_name} deleted`, // Correct field name
     });
     res.status(204).send();
   } catch (err) {
@@ -254,5 +254,5 @@ app.delete('/api/orders/:id', async (req, res) => {
   }
 });
 
-// Start server (no database sync needed for Supabase)
+// Start server
 app.listen(5000, () => console.log('Server running on port 5000'));

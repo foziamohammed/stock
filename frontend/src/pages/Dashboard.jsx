@@ -26,9 +26,11 @@ export default function Dashboard({ darkMode, setDarkMode }) {
 
         // Fetch summary data
         const summaryResponse = await fetch(`${API_URL}/api/dashboard-summary`);
-        if (!summaryResponse.ok) throw new Error(`Failed to fetch summary: ${summaryResponse.status}`);
+        if (!summaryResponse.ok) {
+          const errorText = await summaryResponse.text();
+          throw new Error(`Failed to fetch summary: ${summaryResponse.status}`);}
         const summaryData = await summaryResponse.json();
-        if (!summaryData.totalBooks || !summaryData.lowStock || !summaryData.totalOrders) {
+        if (!summaryData.totalBooks == null || !summaryData.lowStock == null || !summaryData.totalOrders == null) {
           throw new Error('Invalid summary data format');
         }
         setSummary(summaryData);
