@@ -61,23 +61,34 @@ app.get('/api/chart-data', async (req, res) => {
     if (error) throw error;
     const categoryData = data.reduce((acc, book) => {
       const category = book.category || 'Uncategorized';
-      acc[category] = (acc[category] || 0) + (book.quantity || 0); // Changed from amount to quantity
+      acc[category] = (acc[category] || 0) + (book.quantity || 0);
       return acc;
     }, {});
+    // Sort by quantity and limit to top 10
+    const sortedCategories = Object.entries(categoryData)
+      .sort(([, a], [, b]) => b - a) // Sort descending by quantity
+      .slice(0, 10); // Limit to top 10
+    // Sum remaining categories into "Others"
+    const othersQuantity = Object.entries(categoryData)
+      .filter(([cat]) => !sortedCategories.some(([c]) => c === cat))
+      .reduce((sum, [, qty]) => sum + qty, 0);
+    if (othersQuantity > 0) {
+      sortedCategories.push(['Others', othersQuantity]);
+    }
     const chartData = {
-      labels: Object.keys(categoryData),
+      labels: sortedCategories.map(([category]) => category),
       datasets: [
         {
           label: 'Number of Books per Category',
-          data: Object.values(categoryData),
-          backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'],
+          data: sortedCategories.map(([, quantity]) => quantity),
+          backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#FF6347', '#4682B4', '#FFD700', '#20B2AA', '#8A2BE2'],
         },
       ],
     };
     res.json(chartData);
-  } catch (err) {
-    console.error('Error fetching chart data:', err);
-    res.status(500).json({ error: 'Failed to fetch chart data', details: err.message });
+  } catch (error) {
+    console.error('Error fetching chart data:', error);
+    res.status(500).json({ error: 'Failed to fetch chart data' });
   }
 });
 
@@ -101,29 +112,22 @@ app.get('/api/dashboard-summary', async (req, res) => {
 
 // Add a book
 app.post('/api/books', async (req, res) => {
-  console.log('Received POST /api/books:', req.body);
-  try {
-    const { name, category, amount, cost, date } = req.body;
-    if (!name || !category || !amount || !cost || !date) {
-      return res.status(400).json({ error: 'All fields are required' });
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
-    }
-    const { data, error } = await supabase
-      .from('books')
-      .insert({ book_name: name, category, quantity: amount, price: cost, date_added: date }) // Changed field names
-      .select();
-    if (error) throw error;
-    await supabase.from('activities').insert({
-      type: 'book_added',
-      message: `New book "${name}" added to inventory`,
-    });
-    res.status(201).json(data[0]);
-  } catch (err) {
-    console.error('Error adding book:', err);
-    res.status(500).json({ error: 'Failed to add book', details: err.message });
-  }
+  // Map frontend names to Supabase names
+  const payload = {
+    book_name: req.body.name,       // 'name' → 'book_name'
+    category: req.body.category,
+    quantity: req.body.amount,      // 'amount' → 'quantity'
+    price: req.body.cost,           // 'cost' → 'price'
+    date_added: req.body.date_added || new Date().toISOString().split('T')[0]
+  };
+
+  const { data, error } = await supabase
+    .from('books')
+    .insert(payload)
+    .select();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data[0]);
 });
 
 // Update a book
@@ -131,23 +135,23 @@ app.put('/api/books/:id', async (req, res) => {
   console.log(`Received PUT /api/books/${req.params.id}:`, req.body);
   try {
     const { id } = req.params;
-    const { name, category, amount, cost, date } = req.body;
-    if (!name || !category || !amount || !cost || !date) {
+    const { book_name, category, quantity, price, date_added } = req.body; // Updated from name to book_name
+    if (!book_name || !category || quantity == null || price == null || !date_added) {
       return res.status(400).json({ error: 'All fields are required' });
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date_added)) {
       return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
     }
     const { data, error } = await supabase
       .from('books')
-      .update({ book_name: name, category, quantity: amount, price: cost, date_added: date }) // Changed field names
+      .update({ book_name, category, quantity, price, date_added })
       .eq('id', id)
       .select();
     if (error) throw error;
     if (!data.length) return res.status(404).json({ error: 'Book not found' });
     await supabase.from('activities').insert({
       type: 'book_updated',
-      message: `Book "${name}" updated`,
+      message: `Book "${book_name}" updated`,
     });
     res.status(200).json(data[0]);
   } catch (err) {
@@ -226,7 +230,7 @@ app.delete('/api/books/:id', async (req, res) => {
     await supabase.from('books').delete().eq('id', id);
     await supabase.from('activities').insert({
       type: 'book_deleted',
-      message: `Book "${data[0].book_name}" deleted from inventory`, // Changed from name to book_name
+      message: `Book "${data[0].book_name}" deleted from inventory`,
     });
     res.status(204).send();
   } catch (err) {
@@ -245,7 +249,7 @@ app.delete('/api/orders/:id', async (req, res) => {
     await supabase.from('orders').delete().eq('id', id);
     await supabase.from('activities').insert({
       type: 'order_deleted',
-      message: `Order from ${data[0].customer_name} deleted`, // Correct field name
+      message: `Order from ${data[0].customer_name} deleted`,
     });
     res.status(204).send();
   } catch (err) {

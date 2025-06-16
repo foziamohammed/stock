@@ -14,13 +14,19 @@ import {
   FiHelpCircle,
 } from "react-icons/fi";
 import { BsMoonStars } from "react-icons/bs";
+import { createClient } from "@supabase/supabase-js";
 
-// Dynamically set today's date in DD/MM/YYYY format
-const today = new Date().toLocaleDateString("en-GB", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-}).split("/").join("/"); // Format: 14/06/2025
+// Initialize Supabase client with environment variables
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    "Supabase environment variables (VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY) are not set. Please check your .env file or Netlify environment variables."
+  );
+}
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function Products({ darkMode, setDarkMode }) {
   const [items, setItems] = useState([]);
@@ -33,6 +39,7 @@ export default function Products({ darkMode, setDarkMode }) {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [newItem, setNewItem] = useState({
     name: "",
+    isbn: "",
     category: "",
     amount: "",
     cost: "",
@@ -61,20 +68,17 @@ export default function Products({ darkMode, setDarkMode }) {
     try {
       setLoading(true);
       setError(null);
-      const API_URL = import.meta.env.VITE_API_URL;
-      if (!API_URL) throw new Error("API_URL is not defined");
-      const response = await fetch(`${API_URL}/api/books`);
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-      const data = await response.json();
+      const { data, error } = await supabase.from("books").select("*");
+      if (error) throw error;
       if (Array.isArray(data)) {
-        // Map Supabase fields to frontend-friendly names
         const mappedItems = data.map((item) => ({
           id: item.id,
           name: item.book_name,
+          isbn: item.isbn || "N/A",
           category: item.category || "N/A",
           amount: item.quantity,
-          cost: item.price || item.cost, // Fallback to cost if price exists
-          date: item.date_added || item.date, // Fallback to date if date_added exists
+          cost: item.price,
+          date: item.date_added,
         }));
         setItems(mappedItems);
       } else {
@@ -82,7 +86,7 @@ export default function Products({ darkMode, setDarkMode }) {
       }
     } catch (err) {
       console.error("Failed to fetch books:", err);
-      setError("Failed to fetch books from the server.");
+      setError("Failed to fetch books from Supabase.");
       setItems([]);
     } finally {
       setLoading(false);
@@ -105,77 +109,106 @@ export default function Products({ darkMode, setDarkMode }) {
   };
 
   const handleAddItem = async () => {
-    if (!newItem.name || !newItem.category || !newItem.amount || !newItem.cost) {
+    if (!newItem.name || !newItem.isbn || !newItem.category || !newItem.amount || !newItem.cost) {
       alert("Please fill in all fields.");
       return;
     }
-    const formattedDate = selectedDate.toISOString().split("T")[0]; // YYYY-MM-DD
+
+    const quantity = parseInt(newItem.amount, 10);
+    const price = parseFloat(newItem.cost);
+    
+    if (isNaN(quantity) || quantity < 0) {
+      alert("Please enter a valid quantity");
+      return;
+    }
+    
+    if (isNaN(price) || price < 0) {
+      alert("Please enter a valid price");
+      return;
+    }
+
     const payload = {
       book_name: newItem.name.trim(),
+      isbn: newItem.isbn.trim(),
       category: newItem.category.trim(),
-      quantity: parseInt(newItem.amount),
-      price: parseFloat(newItem.cost), // Assuming cost is price in Supabase
-      date_added: formattedDate,
+      quantity: quantity,
+      price: price,
+      date_added: selectedDate.toISOString().split("T")[0],
     };
+
     try {
-      const API_URL = import.meta.env.VITE_API_URL;
-      const response = await fetch(`${API_URL}/api/books`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      const { data, error } = await supabase
+        .from("books")
+        .insert(payload)
+        .select();
+      if (error) throw error;
+      await supabase.from("activities").insert({
+        type: "book_added",
+        message: `New book added: ${newItem.name} (${newItem.category})`,
       });
-      if (response.ok) {
-        fetchBooks();
-        setNewItem({
-          name: "",
-          category: "",
-          amount: "",
-          cost: "",
-        });
-        setSelectedDate(new Date());
-        setIsModalOpen(false);
-      } else {
-        const errorData = await response.json();
-        alert(`Failed to add book: ${errorData.error || "Server error"}`);
-      }
+      fetchBooks();
+      setNewItem({
+        name: "",
+        isbn: "",
+        category: "",
+        amount: "",
+        cost: "",
+      });
+      setSelectedDate(new Date());
+      setIsModalOpen(false);
     } catch (err) {
       console.error("Error adding book:", err);
-      alert("Error adding book to the server.");
+      alert(err.message || "Error adding book to Supabase.");
     }
   };
 
   const handleEditItem = async () => {
-    if (!editItem.name || !editItem.category || !editItem.amount || !editItem.cost) {
+    if (!editItem.name || !editItem.isbn || !editItem.category || !editItem.amount || !editItem.cost) {
       alert("Please fill in all fields.");
       return;
     }
-    const formattedDate = selectedDate.toISOString().split("T")[0]; // YYYY-MM-DD
+
+    const quantity = parseInt(editItem.amount, 10);
+    const price = parseFloat(editItem.cost);
+    
+    if (isNaN(quantity)) {
+      alert("Please enter a valid quantity");
+      return;
+    }
+    
+    if (isNaN(price)) {
+      alert("Please enter a valid price");
+      return;
+    }
+
     const payload = {
       book_name: editItem.name.trim(),
+      isbn: editItem.isbn.trim(),
       category: editItem.category.trim(),
-      quantity: parseInt(editItem.amount),
-      price: parseFloat(editItem.cost),
-      date_added: formattedDate,
+      quantity: quantity,
+      price: price,
+      date_added: selectedDate.toISOString().split("T")[0],
     };
+
     try {
-      const API_URL = import.meta.env.VITE_API_URL;
-      const response = await fetch(`${API_URL}/api/books/${editItem.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      const { data, error } = await supabase
+        .from("books")
+        .update(payload)
+        .eq("id", editItem.id)
+        .select();
+      if (error) throw error;
+      if (!data.length) throw new Error("Book not found");
+      await supabase.from("activities").insert({
+        type: "book_updated",
+        message: `Book updated: ${editItem.name} (${editItem.category})`,
       });
-      if (response.ok) {
-        fetchBooks();
-        setEditItem(null);
-        setSelectedDate(new Date());
-        setIsEditModalOpen(false);
-      } else {
-        const errorData = await response.json();
-        alert(`Failed to update book: ${errorData.error || "Server error"}`);
-      }
+      fetchBooks();
+      setEditItem(null);
+      setSelectedDate(new Date());
+      setIsEditModalOpen(false);
     } catch (err) {
       console.error("Error updating book:", err);
-      alert("Error updating book on the server.");
+      alert(err.message || "Error updating book in Supabase.");
     }
   };
 
@@ -183,6 +216,7 @@ export default function Products({ darkMode, setDarkMode }) {
     setEditItem({
       id: item.id,
       name: item.name,
+      isbn: item.isbn,
       category: item.category,
       amount: item.amount,
       cost: item.cost,
@@ -198,15 +232,10 @@ export default function Products({ darkMode, setDarkMode }) {
       return;
     }
     try {
-      const API_URL = import.meta.env.VITE_API_URL;
       const deletePromises = selectedItems.map(async (index) => {
         const itemId = filteredItems[index].id;
-        const response = await fetch(`${API_URL}/api/books/${itemId}`, {
-          method: "DELETE",
-        });
-        if (!response.ok) {
-          throw new Error(`Failed to delete book with ID ${itemId}`);
-        }
+        const { error } = await supabase.from("books").delete().eq("id", itemId);
+        if (error) throw error;
       });
       await Promise.all(deletePromises);
       fetchBooks();
@@ -223,7 +252,6 @@ export default function Products({ darkMode, setDarkMode }) {
   };
 
   const uniqueCategories = ["All", ...new Set(items.map((item) => item.category))];
-
   const filteredItems = filterCategory === "All" ? items : items.filter((item) => item.category === filterCategory);
 
   return (
@@ -252,6 +280,19 @@ export default function Products({ darkMode, setDarkMode }) {
                   onChange={handleInputChange}
                   className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-pink-500 focus:border-pink-500"
                   placeholder="Enter book name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  ISBN
+                </label>
+                <input
+                  type="text"
+                  name="isbn"
+                  value={newItem.isbn}
+                  onChange={handleInputChange}
+                  className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-pink-500 focus:border-pink-500"
+                  placeholder="Enter ISBN (e.g., 978-3-16-148410-0)"
                 />
               </div>
               <div>
@@ -350,6 +391,19 @@ export default function Products({ darkMode, setDarkMode }) {
                   onChange={handleInputChange}
                   className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-pink-500 focus:border-pink-500"
                   placeholder="Enter book name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  ISBN
+                </label>
+                <input
+                  type="text"
+                  name="isbn"
+                  value={editItem.isbn}
+                  onChange={handleInputChange}
+                  className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-pink-500 focus:border-pink-500"
+                  placeholder="Enter ISBN (e.g., 978-3-16-148410-0)"
                 />
               </div>
               <div>
@@ -557,6 +611,9 @@ export default function Products({ darkMode, setDarkMode }) {
                   </th>
                   <th className="p-3 text-left text-gray-700 dark:text-gray-300">Book</th>
                   <th className="p-3 text-left text-gray-700 dark:text-gray-300">
+                    ISBN
+                  </th>
+                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">
                     Category
                   </th>
                   <th className="p-3 text-left text-gray-700 dark:text-gray-300">
@@ -574,19 +631,19 @@ export default function Products({ darkMode, setDarkMode }) {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="7" className="p-3 text-center text-gray-700 dark:text-gray-300">
+                    <td colSpan="8" className="p-3 text-center text-gray-700 dark:text-gray-300">
                       Loading books...
                     </td>
                   </tr>
                 ) : error ? (
                   <tr>
-                    <td colSpan="7" className="p-3 text-center text-red-600 dark:text-red-400">
+                    <td colSpan="8" className="p-3 text-center text-red-600 dark:text-red-400">
                       {error}
                     </td>
                   </tr>
                 ) : filteredItems.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="p-3 text-center text-gray-700 dark:text-gray-300">
+                    <td colSpan="8" className="p-3 text-center text-gray-700 dark:text-gray-300">
                       No books found.
                     </td>
                   </tr>
@@ -605,6 +662,9 @@ export default function Products({ darkMode, setDarkMode }) {
                       </td>
                       <td className="p-3 font-semibold text-gray-900 dark:text-gray-100">
                         {item.name}
+                      </td>
+                      <td className="p-3 text-gray-700 dark:text-gray-300">
+                        {item.isbn}
                       </td>
                       <td className="p-3 text-gray-700 dark:text-gray-300">
                         {item.category}

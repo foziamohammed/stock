@@ -10,7 +10,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend,
 
 export default function Dashboard({ darkMode, setDarkMode }) {
   const [summary, setSummary] = useState({ totalBooks: 0, lowStock: 0, totalOrders: 0 });
-  const [chartData, setChartData] = useState(null);
+  const [chartData, setChartData] = useState({ labels: [], datasets: [{ label: '', data: [], backgroundColor: [] }] });
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -25,10 +25,13 @@ export default function Dashboard({ darkMode, setDarkMode }) {
         if (!API_URL) throw new Error('API_URL is not defined');
 
         // Fetch summary data
-        const summaryResponse = await fetch(`${API_URL}/api/dashboard-summary`);
+        const summaryResponse = await fetch(`${API_URL}/api/dashboard-summary`, {
+          cache: 'no-store',
+        });
         if (!summaryResponse.ok) {
           const errorText = await summaryResponse.text();
-          throw new Error(`Failed to fetch summary: ${summaryResponse.status}`);}
+          throw new Error(`Failed to fetch summary: ${summaryResponse.status} - ${errorText}`);
+        }
         const summaryData = await summaryResponse.json();
         if (!summaryData.totalBooks == null || !summaryData.lowStock == null || !summaryData.totalOrders == null) {
           throw new Error('Invalid summary data format');
@@ -36,30 +39,43 @@ export default function Dashboard({ darkMode, setDarkMode }) {
         setSummary(summaryData);
 
         // Fetch chart data
-        const chartResponse = await fetch(`${API_URL}/api/chart-data`);
+        const chartResponse = await fetch(`${API_URL}/api/chart-data`, {
+          cache: 'no-store',
+        });
         if (!chartResponse.ok) throw new Error(`Failed to fetch chart data: ${chartResponse.status}`);
         const chartRawData = await chartResponse.json();
-        // Ensure chartData is in the expected format
+        console.log('Received chart data:', chartRawData); // Debug raw data
+        // Enforce limit to top 10 + Others
+        const limitedLabels = chartRawData.labels.slice(0, 11); // Limit to 10 + Others
+        const limitedData = chartRawData.datasets?.[0]?.data.slice(0, 11) || [];
         const processedChartData = {
-          labels: chartRawData.labels || [],
-          datasets: chartRawData.datasets || [
+          labels: limitedLabels,
+          datasets: [
             {
               label: 'Number of Books per Category',
-              data: chartRawData.data || [],
-              backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'],
+              data: limitedData,
+              backgroundColor: [
+                '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40',
+                '#FF6347', '#4682B4', '#FFD700', '#20B2AA', '#8A2BE2',
+              ].slice(0, limitedLabels.length),
             },
           ],
         };
+        console.log('Processed chart data:', processedChartData); // Debug processed data
         setChartData(processedChartData);
 
         // Fetch activities
-        const activitiesResponse = await fetch(`${API_URL}/api/activities`);
+        const activitiesResponse = await fetch(`${API_URL}/api/activities`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
+        });
         if (!activitiesResponse.ok) throw new Error(`Failed to fetch activities: ${activitiesResponse.status}`);
         const activitiesData = await activitiesResponse.json();
-        // Adjust for Supabase's created_at field
         setActivities(activitiesData.map(activity => ({
           ...activity,
-          createdAt: activity.created_at || activity.createdAt, // Fallback to createdAt if exists
+          createdAt: activity.created_at || activity.createdAt || new Date().toISOString(),
         })));
 
       } catch (err) {
@@ -71,13 +87,18 @@ export default function Dashboard({ darkMode, setDarkMode }) {
     };
 
     fetchAllData();
+    const intervalId = setInterval(fetchAllData, 60000); // Refresh every 60 seconds
+    return () => clearInterval(intervalId);
   }, []);
 
-  // Helper function to calculate time difference
+  // Helper function to calculate time difference with UTC to EAT adjustment
   const getTimeAgo = (dateString) => {
     const now = new Date();
     const activityDate = new Date(dateString);
-    const diffInMs = now - activityDate;
+    const eatOffset = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+    const adjustedActivityDate = new Date(activityDate.getTime() + eatOffset);
+    console.log('Now:', now, 'Adjusted Activity Date:', adjustedActivityDate);
+    const diffInMs = now - adjustedActivityDate;
     const diffInMinutes = Math.floor(diffInMs / 1000 / 60);
     if (diffInMinutes < 1) return 'Just now';
     if (diffInMinutes < 60) return `${diffInMinutes} minute${diffInMinutes > 1 ? 's' : ''} ago`;
@@ -236,8 +257,9 @@ export default function Dashboard({ darkMode, setDarkMode }) {
           {/* Books by Category (Bar Chart) */}
           <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
             <h3 className="text-lg font-semibold mb-4">Books by Category (Quantity)</h3>
-            {chartData ? (
+            {chartData && (
               <Bar
+                key={Date.now()} // Forces re-render on data update
                 data={chartData}
                 options={{
                   responsive: true,
@@ -270,18 +292,15 @@ export default function Dashboard({ darkMode, setDarkMode }) {
                   },
                 }}
               />
-            ) : (
-              <div className="flex justify-center items-center h-64">
-                <div className="text-gray-500">Loading chart data...</div>
-              </div>
             )}
           </div>
 
           {/* Books by Category (Pie Chart) */}
           <div className="bg-[#f3f4f6] dark:bg-gray-800 p-6 rounded-lg shadow-md">
             <h3 className="text-lg font-semibold mb-4">Category Distribution</h3>
-            {chartData ? (
+            {chartData && (
               <Pie
+                key={Date.now()} // Forces re-render on data update
                 data={chartData}
                 options={{
                   responsive: true,
@@ -295,10 +314,6 @@ export default function Dashboard({ darkMode, setDarkMode }) {
                   },
                 }}
               />
-            ) : (
-              <div className="flex justify-center items-center h-64">
-                <div className="text-gray-500">Loading chart data...</div>
-              </div>
             )}
           </div>
         </div>

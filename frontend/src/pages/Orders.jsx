@@ -14,13 +14,27 @@ import {
   FiHelpCircle,
 } from "react-icons/fi";
 import { BsMoonStars } from "react-icons/bs";
+import { createClient } from "@supabase/supabase-js";
 
+// Initialize Supabase client with environment variables
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    "Supabase environment variables (VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY) are not set. Please check your .env file or Netlify environment variables."
+  );
+}
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
+console.log("Supabase URL:", import.meta.env.VITE_SUPABASE_URL);
+console.log("Supabase Anon Key:", import.meta.env.VITE_SUPABASE_ANON_KEY);
 // Dynamically set today's date in DD/MM/YYYY format
 const today = new Date().toLocaleDateString("en-GB", {
   day: "2-digit",
   month: "2-digit",
   year: "numeric",
-}).split("/").join("/"); // Format: 14/06/2025
+}).split("/").join("/"); // Format: 16/06/2025
 
 export default function Orders({ darkMode, setDarkMode }) {
   const [orders, setOrders] = useState([]);
@@ -33,9 +47,10 @@ export default function Orders({ darkMode, setDarkMode }) {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [newOrder, setNewOrder] = useState({
     bookName: "",
+    isbn: "",
     quantity: "",
     customerName: "",
-    category: "", // Added category field
+    category: "",
     status: "active",
   });
   const [filterStatus, setFilterStatus] = useState("All");
@@ -62,16 +77,13 @@ export default function Orders({ darkMode, setDarkMode }) {
     try {
       setLoading(true);
       setError(null);
-      const API_URL = import.meta.env.VITE_API_URL;
-      if (!API_URL) throw new Error("API_URL is not defined");
-      const response = await fetch(`${API_URL}/api/orders`);
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-      const data = await response.json();
+      const { data, error } = await supabase.from("orders").select("*");
+      if (error) throw error;
       if (Array.isArray(data)) {
-        // Map Supabase fields to frontend-friendly names
         const mappedOrders = data.map((order) => ({
           id: order.id,
           bookName: order.book_name,
+          isbn: order.isbn || "N/A",
           quantity: order.quantity,
           customerName: order.customer_name,
           category: order.category || "N/A",
@@ -84,7 +96,7 @@ export default function Orders({ darkMode, setDarkMode }) {
       }
     } catch (err) {
       console.error("Failed to fetch orders:", err);
-      setError("Failed to fetch orders from the server.");
+      setError("Failed to fetch orders from Supabase.");
       setOrders([]);
     } finally {
       setLoading(false);
@@ -109,6 +121,7 @@ export default function Orders({ darkMode, setDarkMode }) {
   const handleAddOrder = async () => {
     if (
       !newOrder.bookName ||
+      !newOrder.isbn ||
       !newOrder.quantity ||
       !newOrder.customerName ||
       !newOrder.category ||
@@ -121,6 +134,7 @@ export default function Orders({ darkMode, setDarkMode }) {
     const formattedDate = selectedDate.toISOString().split("T")[0]; // YYYY-MM-DD
     const payload = {
       book_name: newOrder.bookName.trim(),
+      isbn: newOrder.isbn.trim(),
       quantity: parseInt(newOrder.quantity),
       customer_name: newOrder.customerName,
       category: newOrder.category.trim(),
@@ -128,37 +142,37 @@ export default function Orders({ darkMode, setDarkMode }) {
       status: newOrder.status,
     };
     try {
-      console.log(`[${new Date().toISOString()}] Sending new order:`, payload);
-      const API_URL = import.meta.env.VITE_API_URL;
-      const response = await fetch(`${API_URL}/api/orders`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      console.log(`[${new Date().toISOString()}] Adding new order:`, payload);
+      const { data, error } = await supabase
+        .from("orders")
+        .insert(payload)
+        .select();
+      if (error) throw error;
+      await supabase.from("activities").insert({
+        type: "order_received",
+        message: `New order received from ${newOrder.customerName} for ${newOrder.bookName} (${newOrder.category})`,
       });
-      if (response.ok) {
-        fetchOrders();
-        setNewOrder({
-          bookName: "",
-          quantity: "",
-          customerName: "",
-          category: "",
-          status: "active",
-        });
-        setSelectedDate(new Date());
-        setIsModalOpen(false);
-      } else {
-        const errorData = await response.json();
-        alert(`Failed to add order: ${errorData.error || "Server error"}`);
-      }
+      fetchOrders();
+      setNewOrder({
+        bookName: "",
+        isbn: "",
+        quantity: "",
+        customerName: "",
+        category: "",
+        status: "active",
+      });
+      setSelectedDate(new Date());
+      setIsModalOpen(false);
     } catch (err) {
       console.error("Error adding order:", err);
-      alert("Error adding order to the server.");
+      alert(`Error adding order to Supabase: ${err.message}`);
     }
   };
 
   const handleEditOrder = async () => {
     if (
       !editOrder.bookName ||
+      !editOrder.isbn ||
       !editOrder.quantity ||
       !editOrder.customerName ||
       !editOrder.category ||
@@ -171,6 +185,7 @@ export default function Orders({ darkMode, setDarkMode }) {
     const formattedDate = selectedDate.toISOString().split("T")[0]; // YYYY-MM-DD
     const payload = {
       book_name: editOrder.bookName.trim(),
+      isbn: editOrder.isbn.trim(),
       quantity: parseInt(editOrder.quantity),
       customer_name: editOrder.customerName,
       category: editOrder.category.trim(),
@@ -178,24 +193,24 @@ export default function Orders({ darkMode, setDarkMode }) {
       status: editOrder.status,
     };
     try {
-      const API_URL = import.meta.env.VITE_API_URL;
-      const response = await fetch(`${API_URL}/api/orders/${editOrder.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      const { data, error } = await supabase
+        .from("orders")
+        .update(payload)
+        .eq("id", editOrder.id)
+        .select();
+      if (error) throw error;
+      if (!data.length) throw new Error("Order not found");
+      await supabase.from("activities").insert({
+        type: "order_updated",
+        message: `Order from ${editOrder.customerName} for ${editOrder.bookName} (${editOrder.category}) updated`,
       });
-      if (response.ok) {
-        fetchOrders();
-        setEditOrder(null);
-        setSelectedDate(new Date());
-        setIsEditModalOpen(false);
-      } else {
-        const errorData = await response.json();
-        alert(`Failed to update order: ${errorData.error || "Server error"}`);
-      }
+      fetchOrders();
+      setEditOrder(null);
+      setSelectedDate(new Date());
+      setIsEditModalOpen(false);
     } catch (err) {
       console.error("Error updating order:", err);
-      alert("Error updating order on the server.");
+      alert(`Error updating order in Supabase: ${err.message}`);
     }
   };
 
@@ -203,6 +218,7 @@ export default function Orders({ darkMode, setDarkMode }) {
     setEditOrder({
       id: order.id,
       bookName: order.bookName,
+      isbn: order.isbn,
       quantity: order.quantity,
       customerName: order.customerName,
       category: order.category,
@@ -219,15 +235,14 @@ export default function Orders({ darkMode, setDarkMode }) {
       return;
     }
     try {
-      const API_URL = import.meta.env.VITE_API_URL;
       const deletePromises = selectedOrders.map(async (index) => {
         const orderId = filteredOrders[index].id;
-        const response = await fetch(`${API_URL}/api/orders/${orderId}`, {
-          method: "DELETE",
+        const { error } = await supabase.from("orders").delete().eq("id", orderId);
+        if (error) throw error;
+        await supabase.from("activities").insert({
+          type: "order_deleted",
+          message: `Order from ${filteredOrders[index].customerName} deleted`,
         });
-        if (!response.ok) {
-          throw new Error(`Failed to delete order with ID ${orderId}`);
-        }
       });
       await Promise.all(deletePromises);
       fetchOrders();
@@ -302,6 +317,19 @@ export default function Orders({ darkMode, setDarkMode }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  ISBN
+                </label>
+                <input
+                  type="text"
+                  name="isbn"
+                  value={newOrder.isbn}
+                  onChange={handleInputChange}
+                  className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-pink-500 focus:border-pink-500"
+                  placeholder="Enter ISBN (e.g., 978-3-16-148410-0)"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Quantity
                 </label>
                 <input
@@ -346,7 +374,7 @@ export default function Orders({ darkMode, setDarkMode }) {
                 <DatePicker
                   selected={selectedDate}
                   onChange={(date) => setSelectedDate(date)}
-                  dateFormat="yyyy-MM-dd" // Match backend's expected format
+                  dateFormat="yyyy-MM-dd"
                   className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-pink-500 focus:border-pink-500"
                   placeholderText="Select date"
                 />
@@ -415,6 +443,19 @@ export default function Orders({ darkMode, setDarkMode }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  ISBN
+                </label>
+                <input
+                  type="text"
+                  name="isbn"
+                  value={editOrder.isbn}
+                  onChange={handleInputChange}
+                  className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-pink-500 focus:border-pink-500"
+                  placeholder="Enter ISBN (e.g., 978-3-16-148410-0)"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Quantity
                 </label>
                 <input
@@ -459,7 +500,7 @@ export default function Orders({ darkMode, setDarkMode }) {
                 <DatePicker
                   selected={selectedDate}
                   onChange={(date) => setSelectedDate(date)}
-                  dateFormat="yyyy-MM-dd" // Match backend's expected format
+                  dateFormat="yyyy-MM-dd"
                   className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-pink-500 focus:border-pink-500"
                   placeholderText="Select date"
                 />
@@ -630,6 +671,9 @@ export default function Orders({ darkMode, setDarkMode }) {
                   </th>
                   <th className="p-3 text-left text-gray-700 dark:text-gray-300">Book</th>
                   <th className="p-3 text-left text-gray-700 dark:text-gray-300">
+                    ISBN
+                  </th>
+                  <th className="p-3 text-left text-gray-700 dark:text-gray-300">
                     Quantity
                   </th>
                   <th className="p-3 text-left text-gray-700 dark:text-gray-300">
@@ -648,19 +692,19 @@ export default function Orders({ darkMode, setDarkMode }) {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="8" className="p-3 text-center text-gray-700 dark:text-gray-300">
+                    <td colSpan="9" className="p-3 text-center text-gray-700 dark:text-gray-300">
                       Loading orders...
                     </td>
                   </tr>
                 ) : error ? (
                   <tr>
-                    <td colSpan="8" className="p-3 text-center text-red-600 dark:text-red-400">
+                    <td colSpan="9" className="p-3 text-center text-red-600 dark:text-red-400">
                       {error}
                     </td>
                   </tr>
                 ) : filteredOrders.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="p-3 text-center text-gray-700 dark:text-gray-300">
+                    <td colSpan="9" className="p-3 text-center text-gray-700 dark:text-gray-300">
                       No orders found.
                     </td>
                   </tr>
@@ -679,6 +723,9 @@ export default function Orders({ darkMode, setDarkMode }) {
                       </td>
                       <td className="p-3 font-semibold text-gray-900 dark:text-gray-100">
                         {order.bookName}
+                      </td>
+                      <td className="p-3 text-gray-700 dark:text-gray-300">
+                        {order.isbn}
                       </td>
                       <td className="p-3 text-gray-700 dark:text-gray-300">
                         {order.quantity}
